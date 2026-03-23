@@ -76,6 +76,12 @@ export type HistoryResponse = {
   history: CoinflipHistoryEntry[];
 };
 
+export type MetaResponse = {
+  ok: true;
+  likes: number;
+  liked: boolean;
+};
+
 export const coinflipApi = {
   startRound: (token: string | undefined, betAmount: number, clientSeed?: string) =>
     apiFetch<StartRoundResponse>('POST', '/coinflip/round/start', { token, betAmount, clientSeed }),
@@ -92,5 +98,10 @@ export const coinflipApi = {
   }) => apiFetch<VerifyResponse>('POST', '/coinflip/verify', payload),
 
   history: (limit = 20) => apiFetch<HistoryResponse>('GET', `/coinflip/history?limit=${limit}`),
+
+  meta: (token?: string) =>
+    apiFetch<MetaResponse>('GET', `/coinflip/meta${token ? `?token=${encodeURIComponent(token)}` : ''}`),
+
+  like: (token?: string) => apiFetch<MetaResponse>('POST', '/coinflip/like', { token }),
 };
 

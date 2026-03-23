@@ -8,16 +8,21 @@
     "start": "next start -p 3004"
   },
   "dependencies": {
-    "next": "^14.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@heroui/react": "^2.8.3",
+    "framer-motion": "^12.23.12",
+    "next": "^16.0.7",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "25.5.0",
     "@types/react": "19.2.14",
     "autoprefixer": "^10.4.0",
-    "postcss": "^8.4.0",
-    "tailwindcss": "^3.3.0",
+    "eslint": "^9",
+    "eslint-config-next": "^16.0.7",
+    "tailwindcss": "^4",
     "typescript": "5.9.3"
   }
 }
