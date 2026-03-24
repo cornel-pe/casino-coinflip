@@ -23,6 +23,8 @@ import {
   type FlipResponse,
   type StartRoundResponse,
 } from '../lib/api';
+import { Fa0, FaChartSimple, FaExpand, FaGear, FaGuaraniSign, FaHeart, FaHeartCircleBolt, FaRegHeart, FaShield } from 'react-icons/fa6';
+import { FaQuestionCircle, FaKeyboard } from 'react-icons/fa';
 
 type Phase = 'idle' | 'playing' | 'ended' | 'streak_decision';
 type Choice = 'heads' | 'tails';
@@ -377,8 +379,8 @@ function CoinflipGame() {
 
   return (
     <div className="min-h-screen bg-bg p-3">
-      <div className="mx-auto max-w-[1200px]">
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-3">
+      <div className="mx-auto max-w-[360px] lg:max-w-[1200px]">
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3">
           <Card className="bg-surface border border-border">
             <CardBody className="gap-3">
               <Tabs
@@ -420,7 +422,7 @@ function CoinflipGame() {
                     size="md"
                     color="warning"
                     variant="flat"
-                    className="w-12 px-2 text-white font-medium"
+                    className="min-w-0 w-12 px-1 text-white font-medium"
                     onPress={halveBet}
                     isDisabled={phase === 'playing' || loading}
                   >
@@ -430,7 +432,7 @@ function CoinflipGame() {
                     size="md"
                     color="warning"
                     variant="flat"
-                    className="w-12 px-2 text-white font-medium"
+                    className="min-w-0 w-12 px-1 text-white font-medium"
                     onPress={doubleBet}
                     isDisabled={phase === 'playing' || loading}
                   >
@@ -440,7 +442,7 @@ function CoinflipGame() {
                     size="md"
                     color="warning"
                     variant="flat"
-                    className="w-12 px-2 text-white font-medium"
+                    className="min-w-0 w-12 px-1 text-white font-medium"
                     onPress={maxBet}
                     isDisabled={phase === 'playing' || loading}
                   >
@@ -554,17 +556,16 @@ function CoinflipGame() {
               <div className="relative flex-1 grid place-items-center overflow-x-hidden overflow-y-visible min-h-[280px] rounded-xl border border-border bg-[radial-gradient(circle_at_center,#111827_0%,#070b12_60%,#04070d_100%)]">
 
                 <div className="text-center w-full max-w-[520px]">
-                  <div className="grid grid-cols-[80px_1fr_110px] items-center gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-[80px_1fr_110px] items-center gap-8 md:gap-2">
                     <div
-                      className={`rounded-xl border border-border w-[120px] h-[80px] py-4 flex flex-col items-center justify-center text-sm font-bold ${
-                        playMode === 'streak'
+                      className={`rounded-xl mx-auto md:mx-0 border border-border w-[120px] h-[80px] py-4 flex flex-col items-center justify-center text-sm font-bold ${playMode === 'streak'
                           ? streakRound > 0
                             ? 'text-accent bg-accent/10'
                             : 'text-muted bg-surface2'
                           : result?.result === 'win'
                             ? 'text-accent bg-accent/10'
                             : 'text-muted bg-surface2'
-                      }`}
+                        }`}
                     >
                       <span className="font-bold text-base tabular-nums">
                         {playMode === 'streak' ? streakRound : result?.result?.toUpperCase() ?? '—'}
@@ -599,7 +600,7 @@ function CoinflipGame() {
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-xl border border-border bg-surface2 py-4 w-[120px]">
+                    <div className="rounded-xl mx-auto md:mx-0 border border-border bg-surface2 py-4 w-[120px]">
                       <div className="text-3xl font-bold text-white tabular-nums">x{displayedMultiplier.toFixed(2)}</div>
                       <div className="text-xs text-muted">Multiplier</div>
                       <div className="text-[10px] text-muted leading-tight mt-1 px-1">
@@ -629,28 +630,28 @@ function CoinflipGame() {
 
         <div className="mt-3 flex items-center justify-between">
           <div>
-            <Button size="sm" variant="flat" onPress={likeGame} isDisabled={liked}>
-              {liked ? '♥' : '♡'} {likes}
+            <Button size="sm" color='warning'  variant="flat" onPress={likeGame} isDisabled={liked} className='text-danger'>
+              {liked ? <FaHeart  className='text-base text-danger' /> : <FaRegHeart  className='text-base text-danger' />} {likes}
             </Button>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="flat" isIconOnly onPress={() => setShowStats(true)} aria-label="Statistic">
-              📊
+            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => setShowStats(true)} aria-label="Statistic">
+              <FaChartSimple className='text-primary' />
             </Button>
-            <Button size="sm" variant="flat" isIconOnly onPress={() => setShowFairness(true)} aria-label="Fairness">
-              🛡️
+            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => setShowFairness(true)} aria-label="Fairness">
+              <FaShield className='text-primary' />
             </Button>
-            <Button size="sm" variant="flat" isIconOnly aria-label="Help">
-              ❔
+            <Button size="sm" color='warning' variant="flat" isIconOnly aria-label="Help">
+              <FaQuestionCircle className='text-primary' />
             </Button>
-            <Button size="sm" variant="flat" isIconOnly aria-label="Keyboard">
-              ⌨️
+            <Button size="sm" color='warning' variant="flat" isIconOnly aria-label="Keyboard">
+              <FaKeyboard className='text-primary' />
             </Button>
-            <Button size="sm" variant="flat" isIconOnly aria-label="Fullscreen">
-              ⛶
+            <Button size="sm" color='warning' variant="flat" isIconOnly aria-label="Fullscreen">
+              <FaExpand className='text-primary' />
             </Button>
-            <Button size="sm" variant="flat" isIconOnly onPress={() => setShowSettings(true)} aria-label="Setting">
-              ⚙️
+            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => setShowSettings(true)} aria-label="Setting">
+              <FaGear className='text-primary' />
             </Button>
           </div>
         </div>
