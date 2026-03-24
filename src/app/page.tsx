@@ -1,6 +1,7 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import {
   Button,
@@ -44,6 +45,8 @@ type FairnessState = {
   ticket?: number;
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function CoinflipGame() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -78,7 +81,20 @@ function CoinflipGame() {
   const [musicVolume, setMusicVolume] = useState(50);
   const [effectsVolume, setEffectsVolume] = useState(50);
 
+  const [spriteOutcome, setSpriteOutcome] = useState<Choice>('heads');
+  const [flipping, setFlipping] = useState(false);
+  const [countDown, setCountDown] = useState(0);
+  const [coinRotateDeg, setCoinRotateDeg] = useState(45);
+  /** From backend: 2 * (1 - houseEdge) for a fair coin. */
+  const [baseMultiplier, setBaseMultiplier] = useState(1.96);
+  const [houseEdge, setHouseEdge] = useState(0.02);
+
   const notify = useCallback((msg: string) => setStatus(msg), []);
+
+  const displayedMultiplier = useMemo(() => {
+    const streakFactor = playMode === 'streak' ? 2 ** streakRound : 1;
+    return +(baseMultiplier * streakFactor).toFixed(2);
+  }, [baseMultiplier, playMode, streakRound]);
 
   useEffect(() => {
     if (!token) {
@@ -87,6 +103,18 @@ function CoinflipGame() {
     }
     notify('Session ready. Start a coinflip round.');
   }, [token, notify]);
+
+  useEffect(() => {
+    if (!flipping) {
+      setCoinRotateDeg(45);
+      return;
+    }
+    const from = Math.random() * 45;
+    const to = from + 45;
+    setCoinRotateDeg(from);
+    const t = window.setTimeout(() => setCoinRotateDeg(to), 30);
+    return () => clearTimeout(t);
+  }, [flipping]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -102,6 +130,8 @@ function CoinflipGame() {
       const res = await coinflipApi.meta(token || undefined);
       setLikes(res.likes);
       setLiked(res.liked);
+      if (typeof res.baseMultiplier === 'number') setBaseMultiplier(res.baseMultiplier);
+      if (typeof res.houseEdge === 'number') setHouseEdge(res.houseEdge);
     } catch {
       // ignore
     }
@@ -129,11 +159,15 @@ function CoinflipGame() {
       setBalance(res.newBalance);
       setResult(null);
       setVerifyResult(null);
+      setFlipping(false);
+      setCountDown(0);
       setFairness({
         serverSeedHash: res.fairness.serverSeedHash,
         clientSeed: res.fairness.clientSeed,
         nonce: res.fairness.nonce,
       });
+      if (typeof res.baseMultiplier === 'number') setBaseMultiplier(res.baseMultiplier);
+      if (typeof res.houseEdge === 'number') setHouseEdge(res.houseEdge);
       if (playMode === 'streak') {
         if (!overrideBet) {
           setStreakRound(0);
@@ -156,41 +190,65 @@ function CoinflipGame() {
       if (!roundId || phase !== 'playing') return;
       setLoading(true);
       notify(`Flipping (${choice})...`);
+      setResult(null);
       try {
+        const countdownDelay = turboMode ? 300 : 700;
+        for (let n = 3; n >= 1; n--) {
+          setCountDown(n);
+          await sleep(countdownDelay);
+        }
+        setCountDown(0);
+
         const res = (await coinflipApi.flip(roundId, choice)) as FlipResponse;
-        setBalance(res.newBalance);
-        setResult({
-          result: res.result,
-          outcome: res.outcome,
-          payout: res.payout,
-          multiplier: res.multiplier,
+        setSpriteOutcome(res.outcome);
+        setFlipping(true);
+        await sleep(turboMode ? 1200 : 3000);
+
+        flushSync(() => {
+          setBalance(res.newBalance);
+          setResult({
+            result: res.result,
+            outcome: res.outcome,
+            payout: res.payout,
+            multiplier: res.multiplier,
+          });
+          setFairness((prev) => ({
+            serverSeedHash: res.fairness.serverSeedHash,
+            clientSeed: res.fairness.clientSeed,
+            nonce: res.fairness.nonce,
+            serverSeed: res.fairness.serverSeed,
+            publicSeed: res.fairness.publicSeed,
+            eisBlockHeight: res.fairness.eisBlockHeight,
+            ticket: res.fairness.ticket,
+          }));
+
+          if (playMode === 'streak') {
+            if (res.result === 'win') {
+              const nextBet = res.payout;
+              const base = streakCurrentBet ?? betAmount;
+              setStreakCurrentBet(nextBet);
+              setStreakRound((prev) => prev + 1);
+              setStreakProfit((prev) => +(prev + (res.payout - base)).toFixed(2));
+              setPhase('streak_decision');
+            } else {
+              setStreakCurrentBet(null);
+              setStreakRound(0);
+              setPhase('ended');
+            }
+          } else {
+            setPhase('ended');
+          }
+
+          setFlipping(false);
         });
-        setFairness((prev) => ({
-          serverSeedHash: res.fairness.serverSeedHash,
-          clientSeed: res.fairness.clientSeed,
-          nonce: res.fairness.nonce,
-          serverSeed: res.fairness.serverSeed,
-          publicSeed: res.fairness.publicSeed,
-          eisBlockHeight: res.fairness.eisBlockHeight,
-          ticket: res.fairness.ticket,
-        }));
 
         if (playMode === 'streak') {
           if (res.result === 'win') {
-            const nextBet = res.payout;
-            const base = streakCurrentBet ?? betAmount;
-            setStreakCurrentBet(nextBet);
-            setStreakRound((prev) => prev + 1);
-            setStreakProfit((prev) => +(prev + (res.payout - base)).toFixed(2));
-            setPhase('streak_decision');
-            notify(`Streak win! Next bet $${nextBet.toFixed(2)} or cashout.`);
+            notify(`Streak win! Next bet $${res.payout.toFixed(2)} or cashout.`);
           } else {
-            setStreakCurrentBet(null);
-            setPhase('ended');
             notify(`Streak ended. Coin: ${res.outcome}.`);
           }
         } else {
-          setPhase('ended');
           notify(
             res.result === 'win'
               ? `You won! Coin: ${res.outcome}. +$${res.payout.toFixed(2)}`
@@ -200,11 +258,13 @@ function CoinflipGame() {
         loadHistory();
       } catch (err: any) {
         notify(`Error: ${err.message}`);
+        setCountDown(0);
+        setFlipping(false);
       } finally {
         setLoading(false);
       }
     },
-    [roundId, phase, notify, loadHistory, playMode, streakCurrentBet, betAmount],
+    [roundId, phase, notify, loadHistory, playMode, streakCurrentBet, betAmount, turboMode],
   );
 
   const reset = useCallback(() => {
@@ -212,6 +272,8 @@ function CoinflipGame() {
     setResult(null);
     setFairness(null);
     setVerifyResult(null);
+    setFlipping(false);
+    setCountDown(0);
     setPhase('idle');
     setStreakRound(0);
     setStreakCurrentBet(null);
@@ -313,8 +375,6 @@ function CoinflipGame() {
     setBetAmount(Math.max(1, +b.toFixed(2)));
   }, [balance, betAmount]);
 
-  const isFlipping = loading && phase === 'playing';
-
   return (
     <div className="min-h-screen bg-bg p-3">
       <div className="mx-auto max-w-[1200px]">
@@ -327,35 +387,71 @@ function CoinflipGame() {
                 variant="underlined"
                 fullWidth
                 color="primary"
+                classNames={{
+                  tabList: "scrollbar-hide!"
+                }}
               >
                 <Tab key="solo" title="Solo" />
                 <Tab key="streak" title="Streak" />
               </Tabs>
 
-              <div className="text-xs text-muted flex items-center justify-between">
+              <div className="text-sm font-semibold text-white flex items-center justify-between">
                 <span>Amount</span>
                 <span>${(balance ?? 0).toFixed(2)}</span>
               </div>
 
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                value={String(betAmount)}
-                onChange={(e) => setBetAmount(Math.max(1, Number(e.target.value)))}
-                isDisabled={phase === 'playing' || loading}
-                classNames={{ inputWrapper: 'bg-surface2 border border-border' }}
-              />
-
-              <div className="grid grid-cols-3 gap-2">
-                <Button size="sm" variant="flat" onPress={halveBet}>/2</Button>
-                <Button size="sm" variant="flat" onPress={doubleBet}>x2</Button>
-                <Button size="sm" variant="flat" onPress={maxBet}>Max</Button>
+              <div className="flex items-stretch rounded-lg border border-border bg-surface2 min-h-12 overflow-hidden">
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={String(betAmount)}
+                  onChange={(e) => setBetAmount(Math.max(1, Number(e.target.value)))}
+                  isDisabled={phase === 'playing' || loading}
+                  classNames={{
+                    base: 'flex-1 min-w-0',
+                    inputWrapper:
+                      'bg-transparent shadow-none border-none rounded-none h-12 min-h-12 px-3 data-[hover=true]:bg-transparent group-data-[focus=true]:bg-transparent',
+                    input: 'text-lg font-medium text-white! placeholder:text-muted',
+                  }}
+                />
+                <div className="flex items-center gap-1 shrink-0 pr-2 pl-1 border-l border-border">
+                  <Button
+                    size="md"
+                    color="warning"
+                    variant="flat"
+                    className="w-12 px-2 text-white font-medium"
+                    onPress={halveBet}
+                    isDisabled={phase === 'playing' || loading}
+                  >
+                    /2
+                  </Button>
+                  <Button
+                    size="md"
+                    color="warning"
+                    variant="flat"
+                    className="w-12 px-2 text-white font-medium"
+                    onPress={doubleBet}
+                    isDisabled={phase === 'playing' || loading}
+                  >
+                    x2
+                  </Button>
+                  <Button
+                    size="md"
+                    color="warning"
+                    variant="flat"
+                    className="w-12 px-2 text-white font-medium"
+                    onPress={maxBet}
+                    isDisabled={phase === 'playing' || loading}
+                  >
+                    Max
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-4 gap-2">
                 {[1, 10, 100, 1000].map((n) => (
-                  <Button key={n} size="sm" variant="flat" onPress={() => quickSetBet(n)}>
+                  <Button key={n} size="md" variant="flat" onPress={() => quickSetBet(n)} className='font-bold text-white' color='warning'>
                     {n >= 1000 ? '1K' : n}
                   </Button>
                 ))}
@@ -372,10 +468,10 @@ function CoinflipGame() {
 
               {phase === 'idle' && (
                 <Button
-                  color="warning"
+                  color="primary"
                   onPress={() => startRound()}
                   isDisabled={loading}
-                  className="text-black font-bold"
+                  className="font-bold text-black"
                   fullWidth
                 >
                   Start Round
@@ -386,17 +482,19 @@ function CoinflipGame() {
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     onPress={() => doFlip('heads')}
-                    isDisabled={loading || phase !== 'playing'}
+                    isDisabled={loading || phase !== 'playing' || flipping || countDown > 0}
                     variant="flat"
                     fullWidth
+                    className='font-bold bg-success'
                   >
                     Bet Heads
                   </Button>
                   <Button
                     onPress={() => doFlip('tails')}
-                    isDisabled={loading || phase !== 'playing'}
+                    isDisabled={loading || phase !== 'playing' || flipping || countDown > 0}
                     variant="flat"
                     fullWidth
+                    className='font-bold bg-default'
                   >
                     Bet Tails
                   </Button>
@@ -404,23 +502,18 @@ function CoinflipGame() {
               )}
 
               {playMode === 'streak' && phase === 'streak_decision' && (
-                <div className="space-y-2">
-                  <div className="text-xs text-muted text-center">
-                    Continue streak with <span className="text-white font-semibold">${(streakCurrentBet ?? 0).toFixed(2)}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button color="primary" onPress={continueStreak} isDisabled={loading}>
-                      Continue
-                    </Button>
-                    <Button variant="flat" onPress={cashoutStreak}>
-                      Cashout
-                    </Button>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button color="primary" onPress={continueStreak} isDisabled={loading} className="font-bold">
+                    Continue
+                  </Button>
+                  <Button variant="flat" onPress={cashoutStreak} className="font-bold">
+                    Cashout
+                  </Button>
                 </div>
               )}
 
               {phase === 'ended' && (
-                <Button variant="flat" onPress={reset} fullWidth>
+                <Button variant="flat" onPress={reset} fullWidth className='bg-primary font-bold'>
                   Play Again
                 </Button>
               )}
@@ -448,9 +541,8 @@ function CoinflipGame() {
                   {history.slice(0, 20).map((h) => (
                     <span
                       key={`${h.roundId}-${h.settledAt}`}
-                      className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                        h.result === 'win' ? 'bg-accent/15 text-accent' : 'bg-danger/15 text-danger'
-                      }`}
+                      className={`rounded-md px-2 py-1 text-xs font-semibold ${h.result === 'win' ? 'bg-accent/15 text-accent' : 'bg-danger/15 text-danger'
+                        }`}
                     >
                       {h.outcome === 'heads' ? 'H' : 'T'}
                     </span>
@@ -459,55 +551,72 @@ function CoinflipGame() {
                 </div>
               </div>
 
-              <div className="relative flex-1 grid place-items-center overflow-hidden rounded-xl border border-border bg-[radial-gradient(circle_at_center,#111827_0%,#070b12_60%,#04070d_100%)]">
-                <div className="absolute inset-0 opacity-25 pointer-events-none">
-                  <div className="absolute left-4 top-12 h-56 w-1 rounded-full bg-white/20" />
-                  <div className="absolute left-12 top-8 h-64 w-1 rounded-full bg-white/10" />
-                  <div className="absolute right-4 top-12 h-56 w-1 rounded-full bg-white/20" />
-                  <div className="absolute right-12 top-8 h-64 w-1 rounded-full bg-white/10" />
-                  <div className="absolute left-1/2 top-3 h-10 w-36 -translate-x-1/2 rounded-full bg-white/10 blur-xl" />
-                </div>
+              <div className="relative flex-1 grid place-items-center overflow-x-hidden overflow-y-visible min-h-[280px] rounded-xl border border-border bg-[radial-gradient(circle_at_center,#111827_0%,#070b12_60%,#04070d_100%)]">
+
                 <div className="text-center w-full max-w-[520px]">
                   <div className="grid grid-cols-[80px_1fr_110px] items-center gap-2">
-                    <div className={`rounded-xl border border-border py-4 text-sm font-bold ${result?.result === 'win' ? 'text-accent bg-accent/10' : 'text-muted bg-surface2'}`}>
-                      WIN
+                    <div
+                      className={`rounded-xl border border-border w-[120px] h-[80px] py-4 flex flex-col items-center justify-center text-sm font-bold ${
+                        playMode === 'streak'
+                          ? streakRound > 0
+                            ? 'text-accent bg-accent/10'
+                            : 'text-muted bg-surface2'
+                          : result?.result === 'win'
+                            ? 'text-accent bg-accent/10'
+                            : 'text-muted bg-surface2'
+                      }`}
+                    >
+                      <span className="font-bold text-base tabular-nums">
+                        {playMode === 'streak' ? streakRound : result?.result?.toUpperCase() ?? '—'}
+                      </span>
+                      <span className="text-xs font-medium">{playMode === 'streak' ? 'Streak' : 'Series'}</span>
                     </div>
-                    <div className="relative">
-                      <div className="mx-auto h-44 w-44 perspective-1000">
-                        <div
-                          className={`relative h-full w-full transform-style-preserve-3d ${
-                            animationEnabled && isFlipping ? (turboMode ? 'animate-pulse' : 'animate-coin-flip') : ''
-                          }`}
-                        >
-                          <div className="absolute inset-0 rounded-full border-4 border-yellow-200 bg-linear-to-br from-yellow-200 via-yellow-400 to-yellow-700 backface-hidden shadow-[0_0_40px_rgba(234,179,8,0.35)] grid place-items-center text-4xl font-black text-amber-900">
-                            H
-                          </div>
-                          <div className="absolute inset-0 rounded-full border-4 border-yellow-200 bg-linear-to-br from-yellow-100 via-yellow-300 to-yellow-600 backface-hidden rotate-y-180 shadow-[0_0_40px_rgba(234,179,8,0.35)] grid place-items-center text-4xl font-black text-amber-900">
-                            T
-                          </div>
+                    <div className="">
+                      <div className="mx-auto h-[100px] w-[100px] ">
+                        <div className='z-50 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'>
+                          {countDown === 0 ? <div
+                            className="mx-auto"
+                            style={{
+                              zIndex: 1000,
+                              width: '248px',
+                              height: '248px',
+                              rotate: `12deg`,
+                              backgroundImage: `url(/assets/images/coinflip_${spriteOutcome}.png)`,
+                              backgroundSize: '248px 12648px',
+                              backgroundPosition: flipping ? '0px -12648px' : '0px 248px',
+                              transition: flipping ? `background-position ${turboMode ? 1.2 : 3}s steps(52)` : 'none',
+                            }}
+                          /> :
+                            <div className="relative">
+                              <p className="text-primary text-4xl font-bold animate-ping absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                                {countDown}
+                              </p>
+                              <p className="text-primary text-4xl font-bold drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]">
+                                {countDown}
+                              </p>
+                            </div>
+                          }
                         </div>
                       </div>
-                      <div className="absolute -left-6 top-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface2 px-2 py-1 text-xs">
-                        <div className="text-muted">Series</div>
-                        <div className="text-white font-bold">{playMode === 'streak' ? streakRound : '-'}</div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-surface2 py-4 w-[120px]">
+                      <div className="text-3xl font-bold text-white tabular-nums">x{displayedMultiplier.toFixed(2)}</div>
+                      <div className="text-xs text-muted">Multiplier</div>
+                      <div className="text-[10px] text-muted leading-tight mt-1 px-1">
+                        {playMode === 'streak' && streakRound > 0
+                          ? `Base ×2^${streakRound}`
+                          : `Base x${baseMultiplier.toFixed(2)} · ${(houseEdge * 100).toFixed(1)}% edge`}
                       </div>
                     </div>
-                    <div className="rounded-xl border border-border bg-surface2 py-4">
-                      <div className="text-3xl font-bold text-white">x1.96</div>
-                      <div className="text-xs text-muted">Multiplier</div>
-                    </div>
                   </div>
-                  <div className={`mt-3 text-2xl font-bold ${result?.result === 'lose' ? 'text-danger' : 'text-muted'}`}>
-                    LOSE
-                  </div>
-                  {result && (
-                    <div className={`mt-2 text-sm ${result.result === 'win' ? 'text-accent' : 'text-danger'}`}>
-                      {result.result.toUpperCase()} · {result.outcome.toUpperCase()} · ${result.payout.toFixed(2)}
+                  {/* {result && (
+                    <div className={`mt-8 text-sm ${result.result === 'win' ? 'text-accent' : 'text-danger'}`}>
+                      {result.result.toUpperCase()} · {result.outcome.toUpperCase()} ·
                     </div>
-                  )}
-                  {isFlipping && (
-                    <div className="mt-2 text-sm text-gold animate-pulse">Flipping coin...</div>
-                  )}
+                  )} */}
+                  {/* {isFlipping && (
+                    <div className="mt-2 text-sm text-gold animate-pulse absolute top-3/4 left-1/2 -translate-x-1/2 -translate-y-1/2">Flipping coin...</div>
+                  )} */}
                 </div>
               </div>
 

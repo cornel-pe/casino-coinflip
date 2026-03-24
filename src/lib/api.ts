@@ -18,6 +18,10 @@ export type StartRoundResponse = {
   ok: true;
   roundId: string;
   newBalance: number;
+  /** House edge in (0,1), e.g. 0.02 */
+  houseEdge?: number;
+  /** Payout multiplier for a single winning flip (before streak UI factor). */
+  baseMultiplier?: number;
   fairness: {
     serverSeedHash: string;
     clientSeed: string;
@@ -80,6 +84,8 @@ export type MetaResponse = {
   ok: true;
   likes: number;
   liked: boolean;
+  houseEdge?: number;
+  baseMultiplier?: number;
 };
 
 export const coinflipApi = {
