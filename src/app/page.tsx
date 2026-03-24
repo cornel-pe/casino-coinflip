@@ -12,9 +12,17 @@ import {
   ModalBody,
   ModalContent,
   ModalHeader,
+  Pagination,
   Slider,
+  Snippet,
   Switch,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
   Tabs,
 } from '@heroui/react';
 import {
@@ -47,7 +55,37 @@ type FairnessState = {
   ticket?: number;
 };
 
+type FairnessCopyRowProps = {
+  label: string;
+  value: string;
+  onCopied?: () => void;
+};
+
+function FairnessCopyRow({ label, value, onCopied }: FairnessCopyRowProps) {
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</div>
+      <Snippet
+        fullWidth
+        size="sm"
+        variant="bordered"
+        hideSymbol
+        codeString={value}
+        classNames={{
+          base: 'w-full max-w-full min-w-0 bg-surface2 border-border shadow-none',
+          pre: 'max-h-28 overflow-y-auto whitespace-pre-wrap break-all py-2 px-2 text-xs font-mono leading-snug text-foreground',
+        }}
+        onCopy={onCopied}
+      >
+        {value}
+      </Snippet>
+    </div>
+  );
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const HISTORY_PAGE_SIZE = 10;
 
 function CoinflipGame() {
   const searchParams = useSearchParams();
@@ -90,13 +128,29 @@ function CoinflipGame() {
   /** From backend: 2 * (1 - houseEdge) for a fair coin. */
   const [baseMultiplier, setBaseMultiplier] = useState(1.96);
   const [houseEdge, setHouseEdge] = useState(0.02);
+  const [historyPage, setHistoryPage] = useState(1);
 
   const notify = useCallback((msg: string) => setStatus(msg), []);
+  const onFairnessCopied = useCallback(() => notify('Copied to clipboard.'), [notify]);
 
   const displayedMultiplier = useMemo(() => {
     const streakFactor = playMode === 'streak' ? 2 ** streakRound : 1;
     return +(baseMultiplier * streakFactor).toFixed(2);
   }, [baseMultiplier, playMode, streakRound]);
+
+  const historyTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE)),
+    [history.length],
+  );
+  const historyRowsPage = useMemo(() => {
+    const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+    return history.slice(start, start + HISTORY_PAGE_SIZE);
+  }, [history, historyPage]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+    setHistoryPage((p) => Math.min(Math.max(1, p), maxPage));
+  }, [history.length]);
 
   useEffect(() => {
     if (!token) {
@@ -559,12 +613,12 @@ function CoinflipGame() {
                   <div className="grid grid-cols-1 md:grid-cols-[80px_1fr_110px] items-center gap-8 md:gap-2">
                     <div
                       className={`rounded-xl mx-auto md:mx-0 border border-border w-[120px] h-[80px] py-4 flex flex-col items-center justify-center text-sm font-bold ${playMode === 'streak'
-                          ? streakRound > 0
-                            ? 'text-accent bg-accent/10'
-                            : 'text-muted bg-surface2'
-                          : result?.result === 'win'
-                            ? 'text-accent bg-accent/10'
-                            : 'text-muted bg-surface2'
+                        ? streakRound > 0
+                          ? 'text-accent bg-accent/10'
+                          : 'text-muted bg-surface2'
+                        : result?.result === 'win'
+                          ? 'text-accent bg-accent/10'
+                          : 'text-muted bg-surface2'
                         }`}
                     >
                       <span className="font-bold text-base tabular-nums">
@@ -610,14 +664,6 @@ function CoinflipGame() {
                       </div>
                     </div>
                   </div>
-                  {/* {result && (
-                    <div className={`mt-8 text-sm ${result.result === 'win' ? 'text-accent' : 'text-danger'}`}>
-                      {result.result.toUpperCase()} · {result.outcome.toUpperCase()} ·
-                    </div>
-                  )} */}
-                  {/* {isFlipping && (
-                    <div className="mt-2 text-sm text-gold animate-pulse absolute top-3/4 left-1/2 -translate-x-1/2 -translate-y-1/2">Flipping coin...</div>
-                  )} */}
                 </div>
               </div>
 
@@ -630,8 +676,8 @@ function CoinflipGame() {
 
         <div className="mt-3 flex items-center justify-between">
           <div>
-            <Button size="sm" color='warning'  variant="flat" onPress={likeGame} isDisabled={liked} className='text-danger'>
-              {liked ? <FaHeart  className='text-base text-danger' /> : <FaRegHeart  className='text-base text-danger' />} {likes}
+            <Button size="sm" color='warning' variant="flat" onPress={likeGame} isDisabled={liked} className='text-danger'>
+              {liked ? <FaHeart className='text-base text-danger' /> : <FaRegHeart className='text-base text-danger' />} {likes}
             </Button>
           </div>
           <div className="flex gap-2">
@@ -663,67 +709,167 @@ function CoinflipGame() {
         )}
       </div>
 
-      <Modal isOpen={showStats} onOpenChange={setShowStats} size="xl" placement="center">
-        <ModalContent className="bg-surface text-white">
-          <ModalHeader>Recent CoinFlip History</ModalHeader>
-          <ModalBody>
+      <Modal
+        isOpen={showStats}
+        onOpenChange={(open) => {
+          setShowStats(open);
+          if (open) setHistoryPage(1);
+        }}
+        size="xl"
+        placement="center"
+        scrollBehavior="inside"
+      >
+        <ModalContent className="bg-surface text-white border border-border">
+          <ModalHeader className="border-b border-border">Recent CoinFlip history</ModalHeader>
+          <ModalBody className="gap-4 pt-4">
             {history.length === 0 ? (
-              <div className="text-sm text-muted mb-4">No completed rounds yet.</div>
+              <div className="text-sm text-muted">No completed rounds yet.</div>
             ) : (
-              <div className="max-h-96 overflow-auto text-sm">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-muted">
-                      <th className="text-left py-1">Round</th>
-                      <th className="text-left py-1">Result</th>
-                      <th className="text-left py-1">Outcome</th>
-                      <th className="text-right py-1">Bet</th>
-                      <th className="text-right py-1">Payout</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((h) => (
-                      <tr key={h.roundId} className="border-t border-border">
-                        <td className="py-1 pr-2">{h.roundId}</td>
-                        <td className={h.result === 'win' ? 'text-accent' : 'text-danger'}>{h.result.toUpperCase()}</td>
-                        <td>{h.outcome.toUpperCase()}</td>
-                        <td className="text-right">${h.betAmount.toFixed(2)}</td>
-                        <td className="text-right">${h.payout.toFixed(2)}</td>
-                      </tr>
+              <div className="flex flex-col gap-3">
+                <Table
+                  removeWrapper
+                  aria-label="Recent coinflip rounds"
+                  classNames={{
+                    base: 'max-h-80 overflow-auto',
+                    table: 'min-w-full',
+                    th: 'text-muted text-xs uppercase tracking-wide',
+                    td: 'text-sm',
+                  }}
+                  bottomContent={
+                    historyTotalPages > 1 ? (
+                      <div className="flex w-full justify-center border-t border-border pt-3">
+                        <Pagination
+                          showControls
+                          size="sm"
+                          color="primary"
+                          variant="bordered"
+                          total={historyTotalPages}
+                          page={historyPage}
+                          onChange={setHistoryPage}
+                        />
+                      </div>
+                    ) : null
+                  }
+                  bottomContentPlacement="outside"
+                >
+                  <TableHeader>
+                    <TableColumn key="round">Round</TableColumn>
+                    <TableColumn key="result">Result</TableColumn>
+                    <TableColumn key="outcome">Outcome</TableColumn>
+                    <TableColumn key="bet" align="end">
+                      Bet
+                    </TableColumn>
+                    <TableColumn key="payout" align="end">
+                      Payout
+                    </TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="No rows on this page">
+                    {historyRowsPage.map((h) => (
+                      <TableRow key={`${h.roundId}-${h.settledAt}`}>
+                        <TableCell>
+                          <span className="font-mono text-xs">{h.roundId}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={h.result === 'win' ? 'font-semibold text-accent' : 'font-semibold text-danger'}>
+                            {h.result.toUpperCase()}
+                          </span>
+                        </TableCell>
+                        <TableCell>{h.outcome.toUpperCase()}</TableCell>
+                        <TableCell>
+                          <span className="block text-end tabular-nums">${h.betAmount.toFixed(2)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="block text-end tabular-nums">${h.payout.toFixed(2)}</span>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
+                <div className="text-xs text-muted">
+                  Showing {(historyPage - 1) * HISTORY_PAGE_SIZE + 1}–
+                  {Math.min(historyPage * HISTORY_PAGE_SIZE, history.length)} of {history.length}
+                </div>
               </div>
             )}
           </ModalBody>
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={showFairness} onOpenChange={setShowFairness} size="lg" placement="center">
-        <ModalContent className="bg-surface text-white">
-          <ModalHeader>Provably Fair</ModalHeader>
-          <ModalBody>
+      <Modal isOpen={showFairness} onOpenChange={setShowFairness} size="2xl" placement="center" scrollBehavior="inside">
+        <ModalContent className="bg-surface text-white border border-border">
+          <ModalHeader className="flex flex-col gap-1 border-b border-border pb-3">
+            <span className="text-lg font-semibold">Provably fair</span>
+            <span className="text-xs font-normal text-muted">
+              Each value is copyable. Use them with the verify endpoint or an external checker.
+            </span>
+          </ModalHeader>
+          <ModalBody className="gap-0 pt-4">
             {fairness ? (
-              <div className="space-y-2 text-sm pb-4">
-                <div className="break-all"><span className="text-muted">Server Seed Hash:</span> {fairness.serverSeedHash}</div>
-                <div className="break-all"><span className="text-muted">Client Seed:</span> {fairness.clientSeed}</div>
-                <div><span className="text-muted">Nonce:</span> {fairness.nonce}</div>
-                {fairness.publicSeed && <div className="break-all"><span className="text-muted">Public Seed:</span> {fairness.publicSeed}</div>}
-                {fairness.eisBlockHeight !== undefined && <div><span className="text-muted">EIS Block:</span> {fairness.eisBlockHeight}</div>}
-                {fairness.ticket !== undefined && <div><span className="text-muted">Ticket:</span> {fairness.ticket}</div>}
-                {fairness.serverSeed && <div className="break-all"><span className="text-muted">Server Seed:</span> {fairness.serverSeed}</div>}
-                <div className="grid grid-cols-2 gap-2 mt-3">
-                  <Button onPress={verifyFlip} isDisabled={loading || !fairness.serverSeed} color="primary">Verify Result</Button>
-                  <Button onPress={copyFairnessJson} variant="flat">Copy JSON</Button>
+              <div className="space-y-4 pb-4">
+                <div className="grid gap-4 sm:grid-cols-1">
+                  <FairnessCopyRow
+                    label="Server seed hash (committed before flip)"
+                    value={fairness.serverSeedHash}
+                    onCopied={onFairnessCopied}
+                  />
+                  <FairnessCopyRow label="Client seed" value={fairness.clientSeed} onCopied={onFairnessCopied} />
+                  <FairnessCopyRow label="Nonce" value={String(fairness.nonce)} onCopied={onFairnessCopied} />
+                  {fairness.publicSeed ? (
+                    <FairnessCopyRow label="Public seed (EIS / block)" value={fairness.publicSeed} onCopied={onFairnessCopied} />
+                  ) : null}
+                  {fairness.eisBlockHeight !== undefined ? (
+                    <FairnessCopyRow
+                      label="EIS block height"
+                      value={String(fairness.eisBlockHeight)}
+                      onCopied={onFairnessCopied}
+                    />
+                  ) : null}
+                  {fairness.ticket !== undefined ? (
+                    <FairnessCopyRow label="Ticket" value={String(fairness.ticket)} onCopied={onFairnessCopied} />
+                  ) : null}
+                  {fairness.serverSeed ? (
+                    <FairnessCopyRow
+                      label="Server seed (revealed after flip)"
+                      value={fairness.serverSeed}
+                      onCopied={onFairnessCopied}
+                    />
+                  ) : null}
                 </div>
-                {verifyResult && (
-                  <div className={verifyResult.matchesStoredRound ? 'text-accent' : 'text-danger'}>
-                    {verifyResult.matchesStoredRound ? 'PASS' : 'FAIL'} | outcome {verifyResult.outcome.toUpperCase()} | ticket {verifyResult.ticket}
+
+                <div className="grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2">
+                  <Button onPress={verifyFlip}  isDisabled={loading || !fairness.serverSeed} color="primary" className="text-black font-semibold">
+                    Verify result
+                  </Button>
+                  <Button onPress={copyFairnessJson} variant="flat" className="border border-border font-semibold">
+                    Copy full JSON
+                  </Button>
+                </div>
+
+                {verifyResult ? (
+                  <div
+                    className={`rounded-lg border p-4 space-y-3 ${
+                      verifyResult.matchesStoredRound ? 'border-accent/40 bg-accent/5' : 'border-danger/40 bg-danger/5'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted">Verification</span>
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-xs font-bold ${
+                          verifyResult.matchesStoredRound ? 'bg-accent/20 text-accent' : 'bg-danger/20 text-danger'
+                        }`}
+                      >
+                        {verifyResult.matchesStoredRound ? 'PASS' : 'FAIL'}
+                      </span>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <FairnessCopyRow label="Computed outcome" value={verifyResult.outcome} onCopied={onFairnessCopied} />
+                      <FairnessCopyRow label="Computed ticket" value={String(verifyResult.ticket)} onCopied={onFairnessCopied} />
+                    </div>
                   </div>
-                )}
+                ) : null}
               </div>
             ) : (
-              <div className="text-sm text-muted pb-4">Start and resolve a round to see fairness data.</div>
+              <div className="pb-6 text-sm text-muted">Start and resolve a round to see fairness fields here.</div>
             )}
           </ModalBody>
         </ModalContent>
@@ -733,10 +879,12 @@ function CoinflipGame() {
         <ModalContent className="bg-surface text-white">
           <ModalHeader>Settings</ModalHeader>
           <ModalBody>
-            <div className="space-y-4 pb-4">
-              <Switch isSelected={animationEnabled} onValueChange={setAnimationEnabled}>Animation</Switch>
-              <Switch isSelected={turboMode} onValueChange={setTurboMode}>Turbo Mode</Switch>
-              <Switch isSelected={allSounds} onValueChange={setAllSounds}>All Sounds</Switch>
+            <div className="space-y-4 pb-4 ">
+              <div className='flex flex-col items-start gap-3'>
+                <Switch isSelected={animationEnabled} onValueChange={setAnimationEnabled}>Animation</Switch>
+                <Switch isSelected={turboMode} onValueChange={setTurboMode}>Turbo Mode</Switch>
+                <Switch isSelected={allSounds} onValueChange={setAllSounds}>All Sounds</Switch>
+              </div>
 
               <div className="pt-2">
                 <div className="text-sm text-muted mb-1">Music</div>
