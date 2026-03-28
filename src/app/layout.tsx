@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import './globals.css';
+import ThemeFromUrl from './theme-from-url';
 
 export const metadata = {
   title: 'CoinFlip',
@@ -9,7 +10,12 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-bg min-h-screen">{children}</body>
+      <body className="bg-bg dark">
+        <Suspense fallback={null}>
+          <ThemeFromUrl />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

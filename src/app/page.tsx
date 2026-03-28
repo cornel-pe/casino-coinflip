@@ -33,6 +33,7 @@ import {
 } from '../lib/api';
 import { Fa0, FaChartSimple, FaExpand, FaGear, FaGuaraniSign, FaHeart, FaHeartCircleBolt, FaRegHeart, FaShield } from 'react-icons/fa6';
 import { FaQuestionCircle, FaKeyboard } from 'react-icons/fa';
+import { useUiStore } from '../state/uiStore';
 
 type Phase = 'idle' | 'playing' | 'ended' | 'streak_decision';
 type Choice = 'heads' | 'tails';
@@ -102,9 +103,9 @@ function CoinflipGame() {
   const [history, setHistory] = useState<CoinflipHistoryEntry[]>([]);
   const [likes, setLikes] = useState(0);
   const [liked, setLiked] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [showFairness, setShowFairness] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const modals = useUiStore((s) => s.modals);
+  const openModal = useUiStore((s) => s.open);
+  const setModal = useUiStore((s) => s.set);
   const [streakRound, setStreakRound] = useState(0);
   const [streakCurrentBet, setStreakCurrentBet] = useState<number | null>(null);
   const [streakProfit, setStreakProfit] = useState(0);
@@ -432,9 +433,12 @@ function CoinflipGame() {
   }, [balance, betAmount]);
 
   return (
-    <div className="min-h-screen bg-bg p-3">
-      <div className="mx-auto max-w-[360px] lg:max-w-[1200px]">
-        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3">
+    <div className="bg-bg p-3">
+      <div
+        id="coinflip-embed-root"
+        className="mx-auto max-w-[360px] md:max-w-[1200px]"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-3">
           <Card className="bg-surface border border-border">
             <CardBody className="gap-3">
               <Tabs
@@ -468,7 +472,7 @@ function CoinflipGame() {
                     base: 'flex-1 min-w-0',
                     inputWrapper:
                       'bg-transparent shadow-none border-none rounded-none h-12 min-h-12 px-3 data-[hover=true]:bg-transparent group-data-[focus=true]:bg-transparent',
-                    input: 'text-lg font-medium text-white! placeholder:text-muted',
+                    input:'text-lg font-medium text-white! placeholder:text-muted',
                   }}
                 />
                 <div className="flex items-center gap-1 shrink-0 pr-2 pl-1 border-l border-border">
@@ -574,7 +578,7 @@ function CoinflipGame() {
                 </Button>
               )}
 
-              <div className="flex items-center justify-between text-sm bg-surface2 border border-border rounded-lg px-3 py-2">
+              <div className=" hidden items-center justify-between text-sm bg-surface2 border border-border rounded-lg px-3 py-2">
                 <span className="text-muted">Profit</span>
                 <span className="font-semibold text-white">
                   {playMode === 'streak' ? `$${streakProfit.toFixed(2)}` : `$${((result?.payout ?? 0) - betAmount).toFixed(2)}`}
@@ -582,7 +586,7 @@ function CoinflipGame() {
               </div>
 
               {playMode === 'streak' && (
-                <div className="flex items-center justify-between text-xs text-muted bg-surface2 border border-border rounded-lg px-3 py-2">
+                <div className="hidden items-center justify-between text-xs text-muted bg-surface2 border border-border rounded-lg px-3 py-2">
                   <span>Current Streak Bet</span>
                   <span className="text-white font-semibold">${(streakCurrentBet ?? betAmount).toFixed(2)}</span>
                 </div>
@@ -610,9 +614,9 @@ function CoinflipGame() {
               <div className="relative flex-1 grid place-items-center overflow-x-hidden overflow-y-visible min-h-[280px] rounded-xl border border-border bg-[radial-gradient(circle_at_center,#111827_0%,#070b12_60%,#04070d_100%)]">
 
                 <div className="text-center w-full max-w-[520px]">
-                  <div className="grid grid-cols-1 md:grid-cols-[80px_1fr_110px] items-center gap-8 md:gap-2">
+                  <div className="grid grid-cols-1 lg:grid-cols-[80px_1fr_110px] items-center gap-8 md:gap-2">
                     <div
-                      className={`rounded-xl mx-auto md:mx-0 border border-border w-[120px] h-[80px] py-4 flex flex-col items-center justify-center text-sm font-bold ${playMode === 'streak'
+                      className={`rounded-xl mx-auto lg:mx-0 border border-border w-[120px] h-[80px] py-4 flex flex-col items-center justify-center text-sm font-bold ${playMode === 'streak'
                         ? streakRound > 0
                           ? 'text-accent bg-accent/10'
                           : 'text-muted bg-surface2'
@@ -654,7 +658,7 @@ function CoinflipGame() {
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-xl mx-auto md:mx-0 border border-border bg-surface2 py-4 w-[120px]">
+                    <div className="rounded-xl mx-auto lg:mx-0 border border-border bg-surface2 py-4 w-[120px]">
                       <div className="text-3xl font-bold text-white tabular-nums">x{displayedMultiplier.toFixed(2)}</div>
                       <div className="text-xs text-muted">Multiplier</div>
                       <div className="text-[10px] text-muted leading-tight mt-1 px-1">
@@ -681,10 +685,10 @@ function CoinflipGame() {
             </Button>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => setShowStats(true)} aria-label="Statistic">
+            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => openModal('stats')} aria-label="Statistic">
               <FaChartSimple className='text-primary' />
             </Button>
-            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => setShowFairness(true)} aria-label="Fairness">
+            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => openModal('fairness')} aria-label="Fairness">
               <FaShield className='text-primary' />
             </Button>
             <Button size="sm" color='warning' variant="flat" isIconOnly aria-label="Help">
@@ -696,7 +700,7 @@ function CoinflipGame() {
             <Button size="sm" color='warning' variant="flat" isIconOnly aria-label="Fullscreen">
               <FaExpand className='text-primary' />
             </Button>
-            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => setShowSettings(true)} aria-label="Setting">
+            <Button size="sm" color='warning' variant="flat" isIconOnly onPress={() => openModal('settings')} aria-label="Setting">
               <FaGear className='text-primary' />
             </Button>
           </div>
@@ -710,9 +714,9 @@ function CoinflipGame() {
       </div>
 
       <Modal
-        isOpen={showStats}
+        isOpen={modals.stats}
         onOpenChange={(open) => {
-          setShowStats(open);
+          setModal('stats', open);
           if (open) setHistoryPage(1);
         }}
         size="xl"
@@ -795,7 +799,7 @@ function CoinflipGame() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={showFairness} onOpenChange={setShowFairness} size="2xl" placement="center" scrollBehavior="inside">
+      <Modal isOpen={modals.fairness} onOpenChange={(open) => setModal('fairness', open)} size="2xl" placement="center" scrollBehavior="inside">
         <ModalContent className="bg-surface text-white border border-border">
           <ModalHeader className="flex flex-col gap-1 border-b border-border pb-3">
             <span className="text-lg font-semibold">Provably fair</span>
@@ -837,7 +841,7 @@ function CoinflipGame() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2">
-                  <Button onPress={verifyFlip}  isDisabled={loading || !fairness.serverSeed} color="primary" className="text-black font-semibold">
+                  <Button onPress={verifyFlip} isDisabled={loading || !fairness.serverSeed} color="primary" className="text-black font-semibold">
                     Verify result
                   </Button>
                   <Button onPress={copyFairnessJson} variant="flat" className="border border-border font-semibold">
@@ -847,16 +851,14 @@ function CoinflipGame() {
 
                 {verifyResult ? (
                   <div
-                    className={`rounded-lg border p-4 space-y-3 ${
-                      verifyResult.matchesStoredRound ? 'border-accent/40 bg-accent/5' : 'border-danger/40 bg-danger/5'
-                    }`}
+                    className={`rounded-lg border p-4 space-y-3 ${verifyResult.matchesStoredRound ? 'border-accent/40 bg-accent/5' : 'border-danger/40 bg-danger/5'
+                      }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted">Verification</span>
                       <span
-                        className={`rounded-md px-2 py-0.5 text-xs font-bold ${
-                          verifyResult.matchesStoredRound ? 'bg-accent/20 text-accent' : 'bg-danger/20 text-danger'
-                        }`}
+                        className={`rounded-md px-2 py-0.5 text-xs font-bold ${verifyResult.matchesStoredRound ? 'bg-accent/20 text-accent' : 'bg-danger/20 text-danger'
+                          }`}
                       >
                         {verifyResult.matchesStoredRound ? 'PASS' : 'FAIL'}
                       </span>
@@ -875,7 +877,7 @@ function CoinflipGame() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={showSettings} onOpenChange={setShowSettings} size="sm" placement="bottom-center">
+      <Modal isOpen={modals.settings} onOpenChange={(open) => setModal('settings', open)} size="sm" placement="bottom-center">
         <ModalContent className="bg-surface text-white">
           <ModalHeader>Settings</ModalHeader>
           <ModalBody>
